@@ -1,4 +1,5 @@
 import asyncio
+import io
 import os
 import sqlite3
 import time
@@ -7,6 +8,7 @@ from typing import List, Optional
 from uuid import uuid4
 
 import aiofiles
+import pandas as pd
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -67,8 +69,19 @@ async def upload_files(file: UploadFile = File(...)):
         uuid0 = str(uuid4())
         for _, row in csv_data.iterrows():
             cursor.execute(
-                """INSERT INTO table1 (uuid, name, type, size, submit_date, update_date, reference, rate, remarks, registered)
-                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO table1 (
+                        uuid,
+                        name,
+                        type,
+                        size,
+                        submit_date,
+                        update_date,
+                        reference,
+                        rate,
+                        remarks,
+                        registered
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     f"{uuid0}_{row['id']}",
                     row["name"],
@@ -126,8 +139,19 @@ async def add_row(data: RowData):
     cursor = conn.cursor()
     uuid0 = str(uuid4())
     cursor.execute(
-        """INSERT INTO table1 (uuid, name, type, size, submit_date, update_date, reference, rate, remarks, registered)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO table1 (
+                uuid,
+                name,
+                type,
+                size,
+                submit_date,
+                update_date,
+                reference,
+                rate,
+                remarks,
+                registered
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             uuid0,
             data.name,
