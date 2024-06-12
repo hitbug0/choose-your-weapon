@@ -3,6 +3,8 @@ from add_data import add_files, add_single_row
 from get_data import get_data
 from modify_data import modify_data
 
+DF_WIDTH = 2500
+
 # 機能一覧
 comment = """
 # todo: ファイルサーバ空のファイル名取得とそれをプルダウンで選ぶ機能はまだできていない.削除もまだ。
@@ -79,7 +81,7 @@ tabs = tab_container.tabs(UTILITIES)
 with tabs[0]:
     df_container = st.dataframe(
         filtered_df,
-        width=1200,
+        width=DF_WIDTH,
         hide_index=True,
     )
     col_l, col_r = st.columns(2)
@@ -89,7 +91,7 @@ with tabs[0]:
 with tabs[1]:
     df_container = st.dataframe(
         filtered_df,
-        width=1200,
+        width=DF_WIDTH,
         hide_index=True,
     )
     col_c = st.columns(1)[0]
@@ -98,7 +100,7 @@ with tabs[1]:
 with tabs[2]:
     df_container = st.dataframe(
         filtered_df,
-        width=1200,
+        width=DF_WIDTH,
         hide_index=True,
     )
     # 内容確認/修正が完了した後の項目に絞る
@@ -108,7 +110,7 @@ with tabs[3]:
     # 表とグラフの連携とかができそうならdfも表示する
     # df_container = st.dataframe(
     #     filtered_df,
-    #     width=1200,
+    #     width=DF_WIDTH,
     #     hide_index=True,
     # )
     # 計算後の項目のみに絞る（disable）
@@ -118,7 +120,7 @@ with tabs[3]:
 with tabs[4]:
     df_container = st.dataframe(
         filtered_df,
-        width=1200,
+        width=DF_WIDTH,
         hide_index=True,
     )
     # 登録依頼後の項目のみに絞る（disable）

@@ -2,6 +2,8 @@ import pandas as pd
 import requests
 import streamlit as st
 
+DF_WIDTH = 2500
+
 
 def modify_data(div, df_container, df):
     col_l, col_r = div.columns(8)[:2]
@@ -23,7 +25,7 @@ def modify_data(div, df_container, df):
     # 以下は編集モードの場合
     df_modified = df_container.data_editor(
         df,
-        width=1200,
+        width=DF_WIDTH,
         column_config={
             "favorite": st.column_config.CheckboxColumn(
                 "Your favorite?",
