@@ -1,3 +1,5 @@
+# https://docs.streamlit.io/develop/api-reference/execution-flow/st.dialog
+
 import time
 
 import pandas as pd
@@ -18,8 +20,8 @@ def modify_data(div, df_container, df):
 
     # 編集モードでなければ登録処理のみ
     if not checkbox_container.checkbox("Modify Mode"):
-        if button_container.button("Calculation Request"):
-            vote(df)
+        if button_container.button("Request Calculation"):
+            submit(df)
         else:
             print(st.session_state.request_calculate)
 
@@ -39,7 +41,7 @@ def modify_data(div, df_container, df):
         },
         disabled=[
             "uuid",
-            "submit_date",
+            "first_upload_date",
             "update_date",
             "rate",
             "registered",
@@ -64,7 +66,7 @@ def modify_data(div, df_container, df):
 
 
 @st.experimental_dialog("Request Calculation")
-def vote(df):
+def submit(df):
     st.write("Are you sure you want to request calculation?")
     comment = st.text_input("Any Comments:")
     if st.button("Request"):

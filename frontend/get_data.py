@@ -24,7 +24,7 @@ def get_data(last_modyfied_time):
             "name",
             "type",
             "size",
-            "submit_date",
+            "first_upload_date",
             "update_date",
             "reference",
             "rate",
