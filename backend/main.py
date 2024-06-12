@@ -41,17 +41,17 @@ def init_db():
     cursor = conn.cursor()
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS table1 (
-        uuid TEXT PRIMARY KEY,
-        name TEXT,
-        type TEXT,
-        size TEXT,
-        submit_date TEXT,
-        update_date TEXT,
-        reference TEXT,
-        rate TEXT,
-        remarks TEXT,
-        registered BOOLEAN
-    )"""
+            uuid TEXT PRIMARY KEY,
+            name TEXT,
+            type TEXT,
+            size TEXT,
+            submit_date TEXT,
+            update_date TEXT,
+            reference TEXT,
+            rate TEXT,
+            remarks TEXT,
+            registered BOOLEAN
+        )"""
     )
     conn.commit()
     conn.close()
@@ -135,7 +135,9 @@ async def search_data(
 class RowData(BaseModel):
     name: str
     type: str
-    size: str
+    size_x: str
+    size_y: str
+    size_z: str
 
 
 @app.post("/add_row")
@@ -161,7 +163,7 @@ async def add_row(data: RowData):
             uuid0,
             data.name,
             data.type,
-            data.size,
+            data.size_x,
             datetime.now().isoformat(),
             datetime.now().isoformat(),
             "",

@@ -1,19 +1,22 @@
+import time
+
 import requests
 import streamlit as st
 from streamlit import session_state as sts
 
 
 def add_single_row(div):
+    global count
     # 行の追加
     div.subheader("Add Data")
 
-    sts.type_ = sts.get("type", "")
-    sts.name = sts.get("name", "")
-    sts.size = sts.get("size", "")
-
-    sts.name = div.text_input("Name", value=sts.name)
-    sts.type_ = div.text_input("Type", value=sts.type_)
-    sts.size = div.text_input("Size", value=sts.size)
+    # テキストボックスの配置
+    name = div.text_input("Name", "", key=f"add_single_row_name{count}")
+    type_ = div.text_input("Type", "", key=f"add_single_row_type{count}")
+    cols_size = div.columns(3)
+    size_x = cols_size[0].text_input("Size 1", "", key=f"add_single_row_size_x{count}")
+    size_y = cols_size[1].text_input("Size 2", "", key=f"add_single_row_size_y{count}")
+    size_z = cols_size[2].text_input("Size 3", "", key=f"add_single_row_size_z{count}")
 
     # ボタンが押されていない場合ははじく
     if not div.button("Add Row"):
@@ -22,19 +25,26 @@ def add_single_row(div):
     # 以下はボタンが押された場合
     response = requests.post(
         "http://localhost:8000/add_row",
-        json={"name": sts.name, "type": sts.type_, "size": sts.size},
+        json={
+            "name": name,
+            "type": type_,
+            "size_x": size_x,
+            "size_y": size_y,
+            "size_z": size_z,
+        },
     )
 
-    div.write(response.json())  # デバッグ用
-    div.success(f"{sts.name} is added.")  # エラーハンドリングする
+    # div.write(response.json())  # デバッグ用
+    print(response.json())  # デバッグ用
+    div.success(f"{name} is added.")  # エラーハンドリングする
 
-    sts.type_ = ""
-    sts.name = ""
-    sts.size = ""
+    count += 1
+    count %= 10000  # でかくなりすぎないように10000の剰余にする
+    time.sleep(3)
     st.rerun()
 
 
-count = 0  # add_files の upload回ごとに更新される
+count = 0  # add_files によるアップロードの回ごとに更新される
 
 
 def add_files(div):
@@ -49,8 +59,9 @@ def add_files(div):
 
     # 処理
     uploaded_files = uploader_container.file_uploader(
-        "Upload files", accept_multiple_files=True, key=str(count)
+        "Upload files", accept_multiple_files=True, key=f"add_files_uploader{count}"
     )
+
     upload_log = []
 
     # アップロードファイルが未選択の場合ははじく
@@ -70,12 +81,12 @@ def add_files(div):
         filename = response.json()["filename"]
         if response.status_code == 200:
             upload_log += [[div.success(f"{filename} uploaded successfully!"), 1]]
-            # div.write(response.json())
         else:
             upload_log += [[div.error(f"Error uploading {filename}"), 0]]
             error_files += [filename]
 
-        div.write(response.json())  # デバッグ用
+        # div.write(response.json())  # デバッグ用
+        print(response.json())  # デバッグ用
 
         # アップロード数が少ないときはそのまま
         # アップロード数が多く、かつ全部成功しているときはメッセージを短くする
@@ -92,9 +103,11 @@ def add_files(div):
 
     # 一連の処理が終わったらアップローダの中身やボタンを掃除する
     count += 1
-    count %= 100  # でかくなりすぎないように100の剰余にする
+    count %= 10000  # でかくなりすぎないように10000の剰余にする
     uploader_container.empty()
     button_container.empty()
     uploaded_files = uploader_container.file_uploader(
-        "Upload files", accept_multiple_files=True, key=str(count)
+        "Upload files", accept_multiple_files=True, key=f"add_files_uploader{count}"
     )
+    time.sleep(3)
+    upload_log_container.empty()
