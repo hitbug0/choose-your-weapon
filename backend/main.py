@@ -3,6 +3,7 @@ import io
 import os
 import sqlite3
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import List, Optional
 from uuid import uuid4
@@ -13,10 +14,19 @@ from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-app = FastAPI()
-
 DATABASE = "./database/database.db"
 FILE_SERVER = "./file-server/"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("startup event")
+    init_db()
+    yield
+    print("shutdown event")
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 # データベース接続
@@ -45,11 +55,6 @@ def init_db():
     )
     conn.commit()
     conn.close()
-
-
-@app.on_event("startup")
-async def startup_event():
-    init_db()
 
 
 # ファイルアップロード処理
