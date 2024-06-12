@@ -4,22 +4,22 @@ from get_data import get_data
 from modify_data import modify_data
 
 DF_WIDTH = 2500
+DF_HEIGHT1 = 250
+DF_HEIGHT2 = 550
 
 # 機能一覧
 comment = """
 # todo: ファイルサーバ空のファイル名取得とそれをプルダウンで選ぶ機能はまだできていない.削除もまだ。
-"Add Data:                         [追加] データベースへの行の追加、ファイルサーバへのファイルの追加(上書き保存のみ)
-"Modify Data & Request Calculaing: [更新/削除]データの確認/編集/削除と計算依頼
-"Calculating Progress:             [閲覧] 計算依頼をしたデータの内容確認/ステータス確認
-"Metrics:                          [閲覧] 計算結果が判明したデータのメトリクス確認
-"Registering Progress:             [閲覧] 登録依頼をしたデータの内容確認/ステータス確認
+"Add Data:                [追加] データベースへの行の追加、ファイルサーバへのファイルの追加(上書き保存のみ)
+"Modify Data & Calculate: [更新/削除]データの確認/編集/削除と計算依頼
+"Metrics & Register:      [更新] 計算結果が判明したデータのメトリクス確認
+"Check Status:            [閲覧] 計算依頼/登録依頼をしたデータの内容確認/ステータス確認
 """
 UTILITIES = [
     "Add Data　　　　",
-    "Modify Data & Request Calculaing　　　　",
-    "Calculating Progress　　　　",
-    "Metrics　　　　",
-    "Registering Progress　　　　",
+    "Modify Data & Calculate　　　　",
+    "Metrics & Register　　　　",
+    "Check Status　　　　",
 ]
 
 # ステータス一覧
@@ -82,6 +82,7 @@ with tabs[0]:
     df_container = st.dataframe(
         filtered_df,
         width=DF_WIDTH,
+        height=DF_HEIGHT1,
         hide_index=True,
     )
     col_l, col_r = st.columns(2)
@@ -92,6 +93,7 @@ with tabs[1]:
     df_container = st.dataframe(
         filtered_df,
         width=DF_WIDTH,
+        height=DF_HEIGHT1,
         hide_index=True,
     )
     col_c = st.columns(1)[0]
@@ -101,26 +103,18 @@ with tabs[2]:
     df_container = st.dataframe(
         filtered_df,
         width=DF_WIDTH,
+        height=DF_HEIGHT1,
         hide_index=True,
     )
-    # 内容確認/修正が完了した後の項目に絞る
-
-with tabs[3]:
-    pass
-    # 表とグラフの連携とかができそうならdfも表示する
-    # df_container = st.dataframe(
-    #     filtered_df,
-    #     width=DF_WIDTH,
-    #     hide_index=True,
-    # )
     # 計算後の項目のみに絞る（disable）
     # 分析結果を載せる
     # チェックボックスで登録するかどうかを選べる
 
-with tabs[4]:
+with tabs[3]:
     df_container = st.dataframe(
         filtered_df,
         width=DF_WIDTH,
+        height=DF_HEIGHT2,
         hide_index=True,
     )
     # 登録依頼後の項目のみに絞る（disable）

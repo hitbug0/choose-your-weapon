@@ -7,6 +7,7 @@ import requests
 import streamlit as st
 
 DF_WIDTH = 2500
+DF_HEIGHT1 = 250
 
 
 def modify_data(div, df_container, df):
@@ -32,6 +33,7 @@ def modify_data(div, df_container, df):
     df_modified = df_container.data_editor(
         df,
         width=DF_WIDTH,
+        height=DF_HEIGHT1,
         column_config={
             "favorite": st.column_config.CheckboxColumn(
                 "Your favorite?",
