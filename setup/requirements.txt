@@ -6,3 +6,4 @@ streamlit
 requests
 pandas
 aiohttp
+aiofiles
