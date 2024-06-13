@@ -1,11 +1,19 @@
+from datetime import datetime
+
 import streamlit as st
 from add_data import add_files, add_single_row
+from filter_dataframe import filter_dataframe
 from get_data import get_data
 from modify_data import modify_data
 
 DF_WIDTH = 2500
 DF_HEIGHT1 = 250
 DF_HEIGHT2 = 550
+
+# セッション状態の初期化
+if "last_modified_time" not in st.session_state:
+    st.session_state["last_modified_time"] = datetime.now().isoformat()
+
 
 # 機能一覧
 comment = """
@@ -32,14 +40,15 @@ UTILITIES = [
 # ]
 # default_status = ["uploaded"]
 status_options = [  # データのフィルタリングのリスト
-    "ItemA",
-    "ItemB",
-    "ItemC",
-    "ItemD",
+    "just_uploaded",
+    "calculating",
+    "unregistered",
+    "registering",
+    "registered",
 ]
 default_status = [
-    "ItemA",
-    "ItemB",
+    "just_uploaded",
+    "calculating",
 ]
 
 
@@ -57,24 +66,34 @@ tab_container = st.empty()
 # サイドバー
 st.sidebar.title("Search Commands")
 # with st.sidebar.expander("search condition"):
-selected_status = st.sidebar.multiselect(
-    "Status:", options=status_options, default=default_status
+search_status_ = st.sidebar.multiselect(
+    "Status", options=status_options, default=default_status
 )
 search_name = st.sidebar.text_input("name")
 search_type = st.sidebar.text_input("type")
-search_size = st.sidebar.text_input("min size")
-# search_size2 = st.text_input("max size")
+search_size_min = st.sidebar.text_input("min size")
+search_size_max = st.sidebar.text_input("max size")
+
+# todo: ちゃんとした入力バリデーションチェックを入れる
+if search_size_min == "":
+    search_size_min = None
+if search_size_max == "":
+    search_size_max = None
 
 
-# データの取得とフィルタリング
-df, last_modyfied_time = get_data("last_modyfied_time")
-# todo: name, typeなどの検索も実装する
-if selected_status:
-    # filtered_df = df[df["Status"].isin(selected_status)]
-    filtered_df = df[df["name"].isin(selected_status)]
-else:
-    filtered_df = df  # 何も選択されていない場合、全てのデータを表示
+# データの取得
+df, st.session_state["last_modified_time"] = get_data("last_modyfied_time")
 
+# フィルタリング
+filtered_df = filter_dataframe(
+    df,
+    name=search_name,
+    size_min=search_size_min,
+    size_max=search_size_max,
+    type_=search_type,
+    status=search_status_,
+)
+# print(filtered_df)
 
 # 選んだアクションに従ってアクションの表示と処理の呼び出す
 tabs = tab_container.tabs(UTILITIES)

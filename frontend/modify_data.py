@@ -8,6 +8,21 @@ import streamlit as st
 
 DF_WIDTH = 2500
 DF_HEIGHT1 = 250
+DISABLED_COLUMNS = [
+    "uuid",
+    "first_upload_date",
+    "update_date",
+    "rate",
+    "status",
+]
+# カラム名などは column_configで統一的に設定する
+COLUMN_CONFIG = {
+    "favorite": st.column_config.CheckboxColumn(  # todo　この辺書き換える
+        "Your favorite?",
+        help="Select your **favorite** widgets",
+        default=False,
+    ),
+}
 
 
 def modify_data(div, df_container, df):
@@ -34,20 +49,8 @@ def modify_data(div, df_container, df):
         df,
         width=DF_WIDTH,
         height=DF_HEIGHT1,
-        column_config={
-            "favorite": st.column_config.CheckboxColumn(
-                "Your favorite?",
-                help="Select your **favorite** widgets",
-                default=False,
-            )
-        },
-        disabled=[
-            "uuid",
-            "first_upload_date",
-            "update_date",
-            "rate",
-            "registered",
-        ],
+        column_config=COLUMN_CONFIG,
+        disabled=DISABLED_COLUMNS,
         hide_index=True,
     )
 
@@ -63,6 +66,7 @@ def modify_data(div, df_container, df):
     )
     st.success("反映変更した")  # todo エラーハンドリング
     # div.write(response.json())  # デバッグ用
+    print(response.json())
     time.sleep(3)
     st.rerun()
 

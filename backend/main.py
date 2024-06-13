@@ -12,7 +12,7 @@ import aiofiles
 import pandas as pd
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 
 DATABASE = "./database/database.db"
 FILE_SERVER = "./file-server/"
@@ -42,15 +42,18 @@ def init_db():
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS table1 (
             uuid TEXT PRIMARY KEY,
-            name TEXT,
+            id_by_user TEXT,
+            name TEXT NOT NULL,
             type TEXT,
-            size TEXT,
-            first_upload_date TEXT,
-            update_date TEXT,
-            reference TEXT,
-            rate TEXT,
+            size_x REAL NOT NULL,
+            size_y REAL NOT NULL,
+            size_z REAL NOT NULL,
             remarks TEXT,
-            registered BOOLEAN
+            first_upload_date TEXT NOT NULL,
+            update_date TEXT NOT NULL,
+            reference TEXT,
+            rate REAL NOT NULL,
+            status TEXT NOT NULL
         )"""
     )
     conn.commit()
@@ -67,37 +70,45 @@ async def upload_files(file: UploadFile = File(...)):
 
     # summary.csvの処理
     if file.filename == "summary.csv":
+        print("summary.csv来た")
         # CSVの内容をDBに挿入
         conn = get_db()
         cursor = conn.cursor()
         csv_data = pd.read_csv(io.StringIO(content.decode("utf-8")))
         uuid0 = str(uuid4())
-        for _, row in csv_data.iterrows():
+        now = datetime.now().isoformat()
+        for index, row in csv_data.iterrows():
             cursor.execute(
                 """INSERT INTO table1 (
                         uuid,
+                        id_by_user,
                         name,
                         type,
-                        size,
+                        size_x,
+                        size_y,
+                        size_z,
+                        remarks,
                         first_upload_date,
                         update_date,
                         reference,
                         rate,
-                        remarks,
-                        registered
+                        status
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    f"{uuid0}_{row['id']}",
+                    uuid0 + str(index + 1).zfill(3),
+                    row["id"],
                     row["name"],
                     row["type"],
-                    row["size"],
-                    datetime.now().isoformat(),
-                    datetime.now().isoformat(),
+                    row["size x"],
+                    row["size y"],
+                    row["size z"],
+                    row["remarks"],
+                    now,
+                    now,
                     "",
-                    "未検討",
-                    "",
-                    False,
+                    -1,
+                    "just_uploaded",
                 ),
             )
         conn.commit()
@@ -107,37 +118,72 @@ async def upload_files(file: UploadFile = File(...)):
 
 
 # データ検索処理
-@app.get("/search")
-async def search_data(
-    name: Optional[str] = None, type: Optional[str] = None, size: Optional[str] = None
-):
+# @app.get("/search")
+# async def search_data(
+#     name: Optional[str] = None, type: Optional[str] = None, size: Optional[str] = None
+# ):
+#     conn = get_db()
+#     cursor = conn.cursor()
+#     query = "SELECT * FROM table1 WHERE 1=1"
+#     params = []
+#     if name:
+#         query += " AND name LIKE ?"
+#         params.append(f"%{name}%")
+#     if type:
+#         query += " AND type LIKE ?"
+#         params.append(f"%{type}%")
+#     if size:
+#         query += " AND size LIKE ?"
+#         params.append(f"%{size}%")
+
+#     cursor.execute(query, params)
+#     data = cursor.fetchall()
+#     conn.close()
+#     return data
+
+
+# データを全件取得し、最終更新日時を取得する関数
+@app.get("/fetch")
+async def fetch_data_and_last_update():
     conn = get_db()
     cursor = conn.cursor()
-    query = "SELECT * FROM table1 WHERE 1=1"
-    params = []
-    if name:
-        query += " AND name LIKE ?"
-        params.append(f"%{name}%")
-    if type:
-        query += " AND type LIKE ?"
-        params.append(f"%{type}%")
-    if size:
-        query += " AND size LIKE ?"
-        params.append(f"%{size}%")
 
-    cursor.execute(query, params)
-    data = cursor.fetchall()
+    # データ全件取得
+    cursor.execute("SELECT * FROM table1")
+    all_data = cursor.fetchall()
+
+    # 最終更新日時取得
+    cursor.execute("SELECT MAX(update_date) FROM table1")
+    last_update = cursor.fetchone()[0]
+
     conn.close()
-    return data
+
+    return {"data": all_data, "last_update": last_update}
 
 
 # 行追加処理
 class RowData(BaseModel):
+    id_by_user: str
     name: str
     type: str
-    size_x: str
-    size_y: str
-    size_z: str
+    size_x: float = Field(gt=0)
+    size_y: float = Field(gt=0)
+    size_z: float = Field(gt=0)
+    remarks: str
+    status: Optional[str] = "just_uploaded"
+
+    @validator("status")  # todo 書き換える
+    def check_status(cls, v):
+        allowed_statuses = {
+            "just_uploaded",
+            "calculating",
+            "unregistered",
+            "registering",
+            "registered",
+        }
+        if v not in allowed_statuses:
+            raise ValueError(f"status must be one of {allowed_statuses}")
+        return v
 
 
 @app.post("/add_row")
@@ -145,31 +191,39 @@ async def add_row(data: RowData):
     conn = get_db()
     cursor = conn.cursor()
     uuid0 = str(uuid4())
+    now = datetime.now().isoformat()
     cursor.execute(
         """INSERT INTO table1 (
                 uuid,
+                id_by_user,
                 name,
                 type,
-                size,
+                size_x,
+                size_y,
+                size_z,
+                remarks,
                 first_upload_date,
                 update_date,
                 reference,
                 rate,
-                remarks,
-                registered
+                status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             uuid0,
+            data.id_by_user,
             data.name,
             data.type,
             data.size_x,
-            datetime.now().isoformat(),
-            datetime.now().isoformat(),
+            data.size_y,
+            data.size_z,
+            data.remarks,
+            now,
+            now,
             "",
-            "未検討",
+            -1,
             "",
-            False,
+            "just_uploaded",
         ),
     )
     conn.commit()
@@ -188,11 +242,14 @@ async def update_data(update_data: UpdateData):
     cursor = conn.cursor()
     for row in update_data.data:
         cursor.execute(
-            """UPDATE table1 SET name=?, type=?, size=?, update_date=? WHERE uuid=?""",
+            """UPDATE table1 SET id_by_user=?, name=?, type=?, size=?, update_date=? WHERE uuid=?""",
             (
+                row["id_by_user"],
                 row["name"],
                 row["type"],
-                row["size"],
+                row["size_x"],
+                row["size_y"],
+                row["size_z"],
                 datetime.now().isoformat(),
                 row["uuid"],
             ),
@@ -238,7 +295,26 @@ async def get_data():
     return data
 
 
-# 登録処理
+# 計算依頼処理
+class CalcData(BaseModel):
+    data: List[RowData]
+
+
+@app.post("/calc")
+async def calc_data(calc_data: CalcData):
+    conn = get_db()
+    cursor = conn.cursor()
+    for row in calc_data.data:
+        cursor.execute(
+            """UPDATE table1 SET status=? WHERE uuid=?""",
+            (row["status"], row["uuid"]),
+        )
+    conn.commit()
+    conn.close()
+    return {"status": "Calculation requested"}
+
+
+# 登録依頼処理（作成中）
 class RegisterData(BaseModel):
     data: List[RowData]
 
@@ -249,9 +325,9 @@ async def register_data(register_data: RegisterData):
     cursor = conn.cursor()
     for row in register_data.data:
         cursor.execute(
-            """UPDATE table1 SET registered=? WHERE uuid=?""",
-            (row["registered"], row["uuid"]),
+            """UPDATE table1 SET status=? WHERE uuid=?""",
+            (row["status"], row["uuid"]),
         )
     conn.commit()
     conn.close()
-    return {"status": "Registration updated"}
+    return {"status": "Register requested"}

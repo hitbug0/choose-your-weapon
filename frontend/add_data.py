@@ -78,7 +78,8 @@ def add_files(div):
             "http://localhost:8000/upload_files", files={"file": file}
         )
         # アップロード結果を表示
-        filename = response.json()["filename"]
+        print(response)
+        filename = response.json()["filename"]  # todo エラーハンドリングする
         if response.status_code == 200:
             upload_log += [[div.success(f"{filename} uploaded successfully!"), 1]]
         else:
