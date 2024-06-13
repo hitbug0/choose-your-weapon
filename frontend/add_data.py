@@ -1,56 +1,76 @@
 import time
+from datetime import datetime
 
 import requests
 import streamlit as st
-from streamlit import session_state as sts
+from get_data import check_size_type  # type: ignore
+
+count_row = 0  # アップロードの回ごとに更新される値
+count_csv = 0  # アップロードの回ごとに更新される値
+count_file = 0  # アップロードの回ごとに更新される値
 
 
 def add_single_row(div):
-    global count
-    # 行の追加
+    global count_row
+    # DBへの行の追加
     div.subheader("Add Data")
 
     # テキストボックスの配置
-    name = div.text_input("Name", "", key=f"add_single_row_name{count}")
-    type_ = div.text_input("Type", "", key=f"add_single_row_type{count}")
+    # keyを更新することで追加処理後に入力欄を空にできる
     cols_size = div.columns(3)
-    size_x = cols_size[0].text_input("Size 1", "", key=f"add_single_row_size_x{count}")
-    size_y = cols_size[1].text_input("Size 2", "", key=f"add_single_row_size_y{count}")
-    size_z = cols_size[2].text_input("Size 3", "", key=f"add_single_row_size_z{count}")
+    id_ = cols_size[0].text_input(
+        "ID (optional)", "", key=f"add_single_row_id_{count_row}"
+    )
+    name = cols_size[1].text_input("Name", "", key=f"add_single_row_name_{count_row}")
+    type_ = cols_size[2].text_input("Type", "", key=f"add_single_row_type_{count_row}")
+    cols_size = div.columns(3)
+    size_x = cols_size[0].text_input(
+        "Size 1", "", key=f"add_single_row_size_x_{count_row}"
+    )
+    size_y = cols_size[1].text_input(
+        "Size 2", "", key=f"add_single_row_size_y_{count_row}"
+    )
+    size_z = cols_size[2].text_input(
+        "Size 3", "", key=f"add_single_row_size_z_{count_row}"
+    )
+    remarks = div.text_input(
+        "Remarks (optional)", "", key=f"add_single_row_remarks_{count_row}"
+    )
 
-    # ボタンが押されていない場合ははじく
+    # ボタンが押されていない場合は終了
     if not div.button("Add Row"):
         return None
 
-    # 以下はボタンが押された場合
+    # 以下はボタンが押された場合は以下を実行
     response = requests.post(
         "http://localhost:8000/add_row",
         json={
+            "id_by_user": id_,
             "name": name,
             "type": type_,
-            "size_x": size_x,
-            "size_y": size_y,
-            "size_z": size_z,
+            "size_x": check_size_type(size_x),
+            "size_y": check_size_type(size_y),
+            "size_z": check_size_type(size_z),
+            "remarks": remarks,
         },
     )
-
     # div.write(response.json())  # デバッグ用
-    print(response.json())  # デバッグ用
-    div.success(f"{name} is added.")  # エラーハンドリングする
+    # print(response.json())  # デバッグ用
+    if response.json()["msg"] != "Row added":
+        div.error(f"failed to add this record.")
 
-    count += 1
-    count %= 10000  # でかくなりすぎないように10000の剰余にする
+    div.success(f"{name} is added.")
+
+    count_row += 1
+    count_row %= 10000  # 数字がでかくなりすぎないように10000の剰余にしている
     time.sleep(3)
+    st.session_state["last_modified_time"] = datetime.now().isoformat()
     st.rerun()
 
 
-count = 0  # add_files によるアップロードの回ごとに更新される
-
-
 def add_files(div):
-    global count
+    global count_file
     # ファイル一括アップロード
-    div.subheader("Add Files")
 
     # コンテナの定義
     uploader_container = div.empty()
@@ -59,7 +79,7 @@ def add_files(div):
 
     # 処理
     uploaded_files = uploader_container.file_uploader(
-        "Upload files", accept_multiple_files=True, key=f"add_files_uploader{count}"
+        "Files", accept_multiple_files=True, key=f"add_files_uploader{count_file}"
     )
 
     upload_log = []
@@ -69,7 +89,7 @@ def add_files(div):
         return None
 
     # ボタンが押されていない場合ははじく
-    if not button_container.button("Upload"):
+    if not button_container.button("Upload Files"):
         return None
 
     error_files = []
@@ -78,16 +98,14 @@ def add_files(div):
             "http://localhost:8000/upload_files", files={"file": file}
         )
         # アップロード結果を表示
-        print(response)
-        filename = response.json()["filename"]  # todo エラーハンドリングする
         if response.status_code == 200:
+            filename = response.json()["filename"]
             upload_log += [[div.success(f"{filename} uploaded successfully!"), 1]]
         else:
-            upload_log += [[div.error(f"Error uploading {filename}"), 0]]
-            error_files += [filename]
+            upload_log += [[div.error(f"Error uploading {file.name}"), 0]]
+            error_files += [file.name]
 
-        # div.write(response.json())  # デバッグ用
-        print(response.json())  # デバッグ用
+        # print(response.json())  # デバッグ用
 
         # アップロード数が少ないときはそのまま
         # アップロード数が多く、かつ全部成功しているときはメッセージを短くする
@@ -103,12 +121,68 @@ def add_files(div):
             )
 
     # 一連の処理が終わったらアップローダの中身やボタンを掃除する
-    count += 1
-    count %= 10000  # でかくなりすぎないように10000の剰余にする
+    count_file += 1
+    count_file %= 10000  # でかくなりすぎないように10000の剰余にする
     uploader_container.empty()
     button_container.empty()
     uploaded_files = uploader_container.file_uploader(
-        "Upload files", accept_multiple_files=True, key=f"add_files_uploader{count}"
+        "Upload files",
+        accept_multiple_files=True,
+        key=f"add_files_uploader{count_file}",
     )
     time.sleep(3)
     upload_log_container.empty()
+    st.session_state["last_modified_time"] = datetime.now().isoformat()
+    st.rerun()
+
+
+def add_csv(div):
+    global count_csv
+    # ファイル一括アップロード
+
+    # コンテナの定義
+    uploader_container = div.empty()
+    button_container = div.empty()
+    upload_log_container = div.empty()
+
+    # 処理
+    uploaded_file = uploader_container.file_uploader(
+        "CSV",
+        accept_multiple_files=False,
+        key=f"add_csv_uploader{count_csv}",
+        type="csv",
+    )
+
+    # アップロードファイルが未選択の場合ははじく
+    if not uploaded_file:
+        return None
+
+    # ボタンが押されていない場合ははじく
+    if not button_container.button("Upload CSV"):
+        return None
+
+    response = requests.post(
+        "http://localhost:8000/upload_csv", files={"file": uploaded_file}
+    )
+
+    # アップロード結果を表示
+
+    if response.status_code == 200:
+        filename = response.json()["filename"]
+        div.success(f"{filename} uploaded successfully!")
+        print(response.json()["msg"])
+    else:
+        div.error("Error uploading csv")
+
+    # 一連の処理が終わったらアップローダの中身やボタンを掃除する
+    count_csv += 1
+    count_csv %= 10000  # でかくなりすぎないように10000の剰余にする
+    uploader_container.empty()
+    button_container.empty()
+    uploaded_file = uploader_container.file_uploader(
+        "Upload files", accept_multiple_files=True, key=f"add_csv_uploader{count_csv}"
+    )
+    time.sleep(3)
+    upload_log_container.empty()
+    st.session_state["last_modified_time"] = datetime.now().isoformat()
+    st.rerun()

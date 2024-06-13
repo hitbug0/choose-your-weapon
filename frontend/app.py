@@ -1,59 +1,34 @@
 from datetime import datetime
 
+import matplotlib.pyplot as plt
 import streamlit as st
-from add_data import add_files, add_single_row
-from filter_dataframe import filter_dataframe
-from get_data import get_data
-from modify_data import modify_data
 
-DF_WIDTH = 2500
-DF_HEIGHT1 = 250
-DF_HEIGHT2 = 550
+# 以下のimportにおける type: ignore は、誤判定を消すために記した
+from add_data import add_csv, add_files, add_single_row  # type: ignore
+from constants import CONTENTS_CONFIG, DF_CONFIG  # type: ignore
+from filter_dataframe import filter_dataframe  # type: ignore
+from get_data import check_size_type, get_data  # type: ignore
+from modify_data import modify_data  # type: ignore
 
 # セッション状態の初期化
 if "last_modified_time" not in st.session_state:
     st.session_state["last_modified_time"] = datetime.now().isoformat()
 
 
-# 機能一覧
-comment = """
-# todo: ファイルサーバ空のファイル名取得とそれをプルダウンで選ぶ機能はまだできていない.削除もまだ。
-"Add Data:                [追加] データベースへの行の追加、ファイルサーバへのファイルの追加(上書き保存のみ)
-"Modify Data & Calculate: [更新/削除]データの確認/編集/削除と計算依頼
-"Metrics & Register:      [更新] 計算結果が判明したデータのメトリクス確認
-"Check Status:            [閲覧] 計算依頼/登録依頼をしたデータの内容確認/ステータス確認
-"""
-UTILITIES = [
-    "Add Data　　　　",
-    "Modify Data & Calculate　　　　",
-    "Metrics & Register　　　　",
-    "Check Status　　　　",
-]
+def count_categories(df, column_name):
+    if column_name not in df.columns:
+        raise ValueError(f"Column {column_name} does not exist in the DataFrame")
 
-# ステータス一覧
-# status_options = [  # データのフィルタリングのリスト
-#     "just_uploaded",
-#     "calculating",
-#     "unregistered",
-#     "registering",
-#     "registered",
-# ]
-# default_status = ["uploaded"]
-status_options = [  # データのフィルタリングのリスト
-    "just_uploaded",
-    "calculating",
-    "unregistered",
-    "registering",
-    "registered",
-]
-default_status = [
-    "just_uploaded",
-    "calculating",
-]
+    return df[column_name].value_counts()
 
 
 # ページ全般の設定
 st.set_page_config(layout="wide")
+
+# データの取得
+df, st.session_state["last_modified_time"] = get_data(
+    st.session_state["last_modified_time"]
+)
 
 
 # メインエリア
@@ -66,54 +41,54 @@ tab_container = st.empty()
 # サイドバー
 st.sidebar.title("Search Commands")
 # with st.sidebar.expander("search condition"):
-search_status_ = st.sidebar.multiselect(
-    "Status", options=status_options, default=default_status
+search_status = st.sidebar.multiselect(
+    "Status",
+    options=CONTENTS_CONFIG.STATUS_OPTIONS,
+    default=CONTENTS_CONFIG.DEFAULT_STATUS,
 )
-search_name = st.sidebar.text_input("name")
-search_type = st.sidebar.text_input("type")
-search_size_min = st.sidebar.text_input("min size")
-search_size_max = st.sidebar.text_input("max size")
-
-# todo: ちゃんとした入力バリデーションチェックを入れる
-if search_size_min == "":
-    search_size_min = None
-if search_size_max == "":
-    search_size_max = None
-
-
-# データの取得
-df, st.session_state["last_modified_time"] = get_data("last_modyfied_time")
-
-# フィルタリング
+search_name = st.sidebar.text_input("Name")
+search_type = st.sidebar.text_input("Type")
+search_size_max_str = st.sidebar.text_input("Max Size")
+search_size_min_str = st.sidebar.text_input("Min Size")  # minの検索いらんか?
 filtered_df = filter_dataframe(
     df,
     name=search_name,
-    size_min=search_size_min,
-    size_max=search_size_max,
+    size_min=check_size_type(search_size_min_str),
+    size_max=check_size_type(search_size_max_str),
     type_=search_type,
-    status=search_status_,
+    status=search_status,
 )
+
+st.sidebar.title("Reload")
+if st.sidebar.button("Reload Data"):
+    st.cache_data.clear()
+    st.rerun()
 # print(filtered_df)
 
+
 # 選んだアクションに従ってアクションの表示と処理の呼び出す
-tabs = tab_container.tabs(UTILITIES)
+tabs = tab_container.tabs(CONTENTS_CONFIG.UTILITIES)
 with tabs[0]:
     df_container = st.dataframe(
         filtered_df,
-        width=DF_WIDTH,
-        height=DF_HEIGHT1,
+        width=DF_CONFIG.DF_WIDTH,
+        height=DF_CONFIG.DF_HEIGHT[0],
         hide_index=True,
+        column_order=DF_CONFIG.COLUMN_ORDER,
     )
-    col_l, col_r = st.columns(2)
-    add_files(col_l)
-    add_single_row(col_r)
+    columns_ = st.columns([2, 3])
+    columns_[0].subheader("Upload")
+    add_files(columns_[0])
+    add_csv(columns_[0])
+    add_single_row(columns_[1])
 
 with tabs[1]:
     df_container = st.dataframe(
         filtered_df,
-        width=DF_WIDTH,
-        height=DF_HEIGHT1,
+        width=DF_CONFIG.DF_WIDTH,
+        height=DF_CONFIG.DF_HEIGHT[1],
         hide_index=True,
+        column_order=DF_CONFIG.COLUMN_ORDER,
     )
     col_c = st.columns(1)[0]
     modify_data(col_c, df_container, filtered_df)
@@ -121,10 +96,23 @@ with tabs[1]:
 with tabs[2]:
     df_container = st.dataframe(
         filtered_df,
-        width=DF_WIDTH,
-        height=DF_HEIGHT1,
+        width=DF_CONFIG.DF_WIDTH,
+        height=DF_CONFIG.DF_HEIGHT[0],
         hide_index=True,
+        column_order=DF_CONFIG.COLUMN_ORDER,
     )
+    cols = st.columns(3)
+    cols[0].scatter_chart(data=filtered_df, x="size_x", y="rate")
+    cols[1].bar_chart(
+        filtered_df.sort_values("rate", ascending=False),
+        x="name",
+        y="rate",
+    )
+    df_count = count_categories(df, "status")
+    fig, ax = plt.subplots()
+    ax.pie(list(df_count.values), labels=list(df_count.index))
+    cols[2].pyplot(fig)
+
     # 計算後の項目のみに絞る（disable）
     # 分析結果を載せる
     # チェックボックスで登録するかどうかを選べる
@@ -132,8 +120,9 @@ with tabs[2]:
 with tabs[3]:
     df_container = st.dataframe(
         filtered_df,
-        width=DF_WIDTH,
-        height=DF_HEIGHT2,
+        width=DF_CONFIG.DF_WIDTH,
+        height=DF_CONFIG.DF_HEIGHT[1],
         hide_index=True,
+        column_order=DF_CONFIG.COLUMN_ORDER,
     )
     # 登録依頼後の項目のみに絞る（disable）

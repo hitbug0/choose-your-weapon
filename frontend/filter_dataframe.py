@@ -21,6 +21,10 @@ def filter_dataframe(
     # DataFrameをコピー
     df1 = df0.copy()
 
+    print(status)
+    print(size_min)
+    print(size_max)
+
     # 'name'カラムに対する部分一致検索
     if name:
         df1 = df1[df1["name"].str.contains(name, na=False)]
@@ -29,7 +33,6 @@ def filter_dataframe(
     if type_:
         df1 = df1[df1["type"].str.contains(type_, na=False)]
 
-    print(df1)
     # 'size'カラムに対する範囲検索
     if size_min is not None:
         df1 = df1[df1["size_x"] >= size_min]
@@ -40,10 +43,7 @@ def filter_dataframe(
         df1 = df1[df1["size_y"] <= size_max]
         df1 = df1[df1["size_z"] <= size_max]
 
-    print(df1)
-    print(status)
-    print(size_max)
-    print(size_min is not None)
+    # print(df1)
     # statusカラムに対する完全一致＆複数検索
     # 何も選択されていない場合、全てのデータを表示
     # 複数じゃなくてもよいかもしれない

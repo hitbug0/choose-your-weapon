@@ -1,27 +1,31 @@
 import asyncio
 import io
 import os
-import sqlite3
-import time
+import random
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 from uuid import uuid4
 
-import aiofiles
-import pandas as pd
-from fastapi import FastAPI, File, Form, UploadFile
+# 以下のimportにおける type: ignore は、誤判定を消すために記した
+import aiofiles  # type: ignore
+import pandas as pd  # type: ignore
+from fastapi import BackgroundTasks, FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, validator
 
-DATABASE = "./database/database.db"
-FILE_SERVER = "./file-server/"
+from .constants import FILE_SERVER, INSERT_SQL_COMMAND  # type: ignore
+from .models import RowData, TableData  # type: ignore
+from .utils import combine_without_duplication, get_db, init_db  # type: ignore
+
+# todo: debug_mode = ""  # "no log", "upload_files", "fetch", "add_row", "update_data"
 
 
+# 起動時と終了時に走る関数
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("startup event")
     init_db()
+    # todo 計算中にサーバが落ちてcalculatingになったままのレコードに対して計算を実行する
     yield
     print("shutdown event")
 
@@ -29,92 +33,228 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-# データベース接続
-def get_db():
-    conn = sqlite3.connect(DATABASE)
-    return conn
-
-
-# DB初期化
-def init_db():
+# データ全件と最終更新日時を取得する関数
+@app.get("/fetch")
+async def fetch_data_and_last_update():
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(
-        """CREATE TABLE IF NOT EXISTS table1 (
-            uuid TEXT PRIMARY KEY,
-            id_by_user TEXT,
-            name TEXT NOT NULL,
-            type TEXT,
-            size_x REAL NOT NULL,
-            size_y REAL NOT NULL,
-            size_z REAL NOT NULL,
-            remarks TEXT,
-            first_upload_date TEXT NOT NULL,
-            update_date TEXT NOT NULL,
-            reference TEXT,
-            rate REAL NOT NULL,
-            status TEXT NOT NULL
-        )"""
-    )
-    conn.commit()
+
+    # データ全件取得
+    cursor.execute("SELECT * FROM table1")
+    all_data = cursor.fetchall()
+
+    # 最終更新日時取得
+    cursor.execute("SELECT MAX(update_date) FROM table1")
+    last_update = cursor.fetchone()[0]
+
     conn.close()
+
+    return {"data": all_data, "last_update": last_update}
 
 
 # ファイルアップロード処理
 @app.post("/upload_files")
 async def upload_files(file: UploadFile = File(...)):
+    # file.filenameの型検証 (os.path.join のため)
+    if type(file.filename) is not str:
+        return JSONResponse(
+            content={"msg": "type of file.filename is not str (may be None)"}
+        )
+
     file_location = os.path.join(FILE_SERVER, file.filename)
     async with aiofiles.open(file_location, "wb") as f:
         content = await file.read()
         await f.write(content)
 
-    # summary.csvの処理
-    if file.filename == "summary.csv":
-        print("summary.csv来た")
-        # CSVの内容をDBに挿入
-        conn = get_db()
-        cursor = conn.cursor()
-        csv_data = pd.read_csv(io.StringIO(content.decode("utf-8")))
-        uuid0 = str(uuid4())
-        now = datetime.now().isoformat()
-        for index, row in csv_data.iterrows():
-            cursor.execute(
-                """INSERT INTO table1 (
-                        uuid,
-                        id_by_user,
-                        name,
-                        type,
-                        size_x,
-                        size_y,
-                        size_z,
-                        remarks,
-                        first_upload_date,
-                        update_date,
-                        reference,
-                        rate,
-                        status
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    uuid0 + str(index + 1).zfill(3),
-                    row["id"],
-                    row["name"],
-                    row["type"],
-                    row["size x"],
-                    row["size y"],
-                    row["size z"],
-                    row["remarks"],
-                    now,
-                    now,
-                    "",
-                    -1,
-                    "just_uploaded",
-                ),
-            )
-        conn.commit()
-        conn.close()
+    return JSONResponse(content={"filename": file.filename, "msg": "File uploaded"})
 
-    return JSONResponse(content={"filename": file.filename, "status": "File uploaded"})
+
+# csvアップロード処理
+# todo データモデルでバリデーションできるようにする
+@app.post("/upload_csv")
+async def upload_csv(file: UploadFile = File(...)):
+    contents = await file.read()
+    df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
+    print("received an uploaded csv file as df")
+
+    # 初期値の設定
+    conn = get_db()
+    cursor = conn.cursor()
+    uuid0 = str(uuid4())
+    now = datetime.now().isoformat()
+
+    # CSVの内容をDBに挿入
+    for index, row in df.iterrows():
+        cursor.execute(
+            INSERT_SQL_COMMAND,
+            (
+                uuid0 + str(index + 1).zfill(3),
+                row["id"],
+                row["name"],
+                row["type"],
+                row["size x"],  # sizeが数値になっているかバリデーションを入れる
+                row["size y"],
+                row["size z"],
+                row["remarks"],
+                now,
+                now,
+                "",
+                -1,
+                "just_uploaded",
+            ),
+        )
+    conn.commit()
+    conn.close()
+
+    return JSONResponse(content={"filename": file.filename, "msg": "CSV uploaded"})
+
+
+# 行追加処理
+@app.post("/add_row")
+async def add_row(data: RowData):
+    conn = get_db()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    cursor.execute(
+        INSERT_SQL_COMMAND,
+        (
+            data.uuid,
+            data.id_by_user,
+            data.name,
+            data.type,
+            data.size_x,
+            data.size_y,
+            data.size_z,
+            data.remarks,
+            now,
+            now,
+            "",
+            -1,
+            "just_uploaded",
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return {"msg": "Row added"}
+
+
+# データ更新処理
+@app.put("/update_data")
+async def update_data(update_data: TableData):
+    conn = get_db()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    for row in update_data.data:
+        cursor.execute(
+            """UPDATE table1 SET id_by_user=?,
+                name=?,
+                type=?,
+                size_x=?,
+                size_y=?,
+                size_z=?,
+                remarks=?,
+                update_date=? WHERE uuid=?""",
+            (
+                row.id_by_user,
+                row.name,
+                row.type,
+                row.size_x,
+                row.size_y,
+                row.size_z,
+                row.remarks,
+                now,
+                row.uuid,
+            ),
+        )
+    conn.commit()
+    conn.close()
+    return {"msg": "Data updated"}
+
+
+# グローバル変数として計算タスク状態を保持
+# 計算実行対象のレコードのuuidを入れていく # 量や計算時間によっては一時ファイル化などする
+calculation_in_progress: List[str] = []
+calculation_lock = asyncio.Lock()
+register_in_progress: List[str] = []
+register_lock = asyncio.Lock()
+
+
+# 計算依頼処理
+@app.post("/calc")
+async def calc_data(calc_data: TableData, background_tasks: BackgroundTasks):
+    global calculation_in_progress
+
+    # 計算のバックグラウンド実行
+    now = datetime.now().isoformat()
+    calc_uuid_list = [row.uuid for row in calc_data.data]
+    print(calc_data.message)
+    async with calculation_lock:
+        calculation_in_progress = combine_without_duplication(
+            calculation_in_progress, calc_uuid_list
+        )
+
+    print(calculation_in_progress)
+    for uuid in calc_uuid_list:
+        # 同期関数を使って非同期タスクを実行する
+        background_tasks.add_task(run_calculation_sync, uuid)
+
+    # ステータスの更新
+    conn = get_db()
+    cursor = conn.cursor()
+    for row in calc_data.data:
+        cursor.execute(
+            """UPDATE table1 SET status=?,
+                update_date=? WHERE uuid=?""",
+            ("calculating", now, row.uuid),
+        )
+    conn.commit()
+    conn.close()
+    return {"msg": "Calculation started"}
+
+
+# 非同期関数を同期関数でラップする
+def run_calculation_sync(uuid):
+    asyncio.run(run_calculation(uuid))
+
+
+# 計算実行（demo）
+async def run_calculation(uuid):
+    global calculation_in_progress
+    await asyncio.sleep(20)  # シミュレート
+    result = random.uniform(0, 1)
+
+    async with calculation_lock:
+        calculation_in_progress.remove(uuid)
+
+    # ステータスの更新
+    now = datetime.now().isoformat()
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        """UPDATE table1 SET status=?,
+            update_date=?, rate=? WHERE uuid=?""",
+        ("under_review", now, result, uuid),
+    )
+    conn.commit()
+    conn.close()
+    print(f"calc end at {now}: {uuid}")
+
+
+# 登録依頼処理（作成中）# todo
+@app.post("/register")
+async def register_data(register_data: TableData):
+    conn = get_db()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    for row in register_data.data:
+        cursor.execute(
+            """UPDATE table1 SET status=?,
+                update_date=? WHERE uuid=?""",
+            (row.status, now, row.uuid),
+        )
+    conn.commit()
+    conn.close()
+    return {"msg": "Register requested"}
 
 
 # データ検索処理
@@ -140,194 +280,3 @@ async def upload_files(file: UploadFile = File(...)):
 #     data = cursor.fetchall()
 #     conn.close()
 #     return data
-
-
-# データを全件取得し、最終更新日時を取得する関数
-@app.get("/fetch")
-async def fetch_data_and_last_update():
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # データ全件取得
-    cursor.execute("SELECT * FROM table1")
-    all_data = cursor.fetchall()
-
-    # 最終更新日時取得
-    cursor.execute("SELECT MAX(update_date) FROM table1")
-    last_update = cursor.fetchone()[0]
-
-    conn.close()
-
-    return {"data": all_data, "last_update": last_update}
-
-
-# 行追加処理
-class RowData(BaseModel):
-    id_by_user: str
-    name: str
-    type: str
-    size_x: float = Field(gt=0)
-    size_y: float = Field(gt=0)
-    size_z: float = Field(gt=0)
-    remarks: str
-    status: Optional[str] = "just_uploaded"
-
-    @validator("status")  # todo 書き換える
-    def check_status(cls, v):
-        allowed_statuses = {
-            "just_uploaded",
-            "calculating",
-            "unregistered",
-            "registering",
-            "registered",
-        }
-        if v not in allowed_statuses:
-            raise ValueError(f"status must be one of {allowed_statuses}")
-        return v
-
-
-@app.post("/add_row")
-async def add_row(data: RowData):
-    conn = get_db()
-    cursor = conn.cursor()
-    uuid0 = str(uuid4())
-    now = datetime.now().isoformat()
-    cursor.execute(
-        """INSERT INTO table1 (
-                uuid,
-                id_by_user,
-                name,
-                type,
-                size_x,
-                size_y,
-                size_z,
-                remarks,
-                first_upload_date,
-                update_date,
-                reference,
-                rate,
-                status
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            uuid0,
-            data.id_by_user,
-            data.name,
-            data.type,
-            data.size_x,
-            data.size_y,
-            data.size_z,
-            data.remarks,
-            now,
-            now,
-            "",
-            -1,
-            "",
-            "just_uploaded",
-        ),
-    )
-    conn.commit()
-    conn.close()
-    return {"status": "Row added"}
-
-
-# データ更新処理
-class UpdateData(BaseModel):
-    data: List[RowData]
-
-
-@app.put("/update_data")
-async def update_data(update_data: UpdateData):
-    conn = get_db()
-    cursor = conn.cursor()
-    for row in update_data.data:
-        cursor.execute(
-            """UPDATE table1 SET id_by_user=?, name=?, type=?, size=?, update_date=? WHERE uuid=?""",
-            (
-                row["id_by_user"],
-                row["name"],
-                row["type"],
-                row["size_x"],
-                row["size_y"],
-                row["size_z"],
-                datetime.now().isoformat(),
-                row["uuid"],
-            ),
-        )
-    conn.commit()
-    conn.close()
-    return {"status": "Data updated"}
-
-
-# 添付ファイル追加処理
-@app.post("/attach_file/{uuid}")
-async def attach_file(uuid: str, file: UploadFile = File(...)):
-    file_location = os.path.join(FILE_SERVER, file.filename)
-    async with aiofiles.open(file_location, "wb") as f:
-        content = await file.read()
-        await f.write(content)
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""SELECT reference FROM table1 WHERE uuid=?""", (uuid,))
-    references = cursor.fetchone()[0]
-    if references:
-        references = references.split(",")
-    else:
-        references = []
-    references.append(file.filename)
-    cursor.execute(
-        """UPDATE table1 SET reference=? WHERE uuid=?""", (",".join(references), uuid)
-    )
-    conn.commit()
-    conn.close()
-    return {"status": "File attached"}
-
-
-# データ取得処理
-@app.get("/get_data")
-async def get_data():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM table1")
-    data = cursor.fetchall()
-    conn.close()
-    return data
-
-
-# 計算依頼処理
-class CalcData(BaseModel):
-    data: List[RowData]
-
-
-@app.post("/calc")
-async def calc_data(calc_data: CalcData):
-    conn = get_db()
-    cursor = conn.cursor()
-    for row in calc_data.data:
-        cursor.execute(
-            """UPDATE table1 SET status=? WHERE uuid=?""",
-            (row["status"], row["uuid"]),
-        )
-    conn.commit()
-    conn.close()
-    return {"status": "Calculation requested"}
-
-
-# 登録依頼処理（作成中）
-class RegisterData(BaseModel):
-    data: List[RowData]
-
-
-@app.post("/register")
-async def register_data(register_data: RegisterData):
-    conn = get_db()
-    cursor = conn.cursor()
-    for row in register_data.data:
-        cursor.execute(
-            """UPDATE table1 SET status=? WHERE uuid=?""",
-            (row["status"], row["uuid"]),
-        )
-    conn.commit()
-    conn.close()
-    return {"status": "Register requested"}
