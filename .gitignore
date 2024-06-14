@@ -5,8 +5,7 @@ direnv/
 .mypy_cache/
 
 # Ignore frontend and backend __pycache__ directories
-frontend/__pycache__/
-backend/__pycache__/
+*/__pycache__/
 
 # Ignore file-server directory
 file-server/
