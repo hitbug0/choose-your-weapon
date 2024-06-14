@@ -1,12 +1,9 @@
 import time
 from datetime import datetime
 
-import pandas as pd
-import requests
 import streamlit as st
-from modules.constants import DF_CONFIG, CsvRowData, CsvTableData
-from modules.utils import str2each_type
-from pydantic import ValidationError
+from api.api import add_row_api, upload_csv_api, upload_file_api  # type: ignore
+from modules.constants import DF_CONFIG  # type: ignore
 
 count_row = 0  # アップロードの回ごとに更新される値
 count_csv = 0  # アップロードの回ごとに更新される値
@@ -19,6 +16,7 @@ def add_data(df):
         width=DF_CONFIG.DF_WIDTH,
         height=DF_CONFIG.DF_HEIGHT[0],
         hide_index=True,
+        column_config=DF_CONFIG.COLUMN_CONFIG,
         column_order=DF_CONFIG.COLUMN_ORDER,
     )
     columns_ = st.columns([2, 3])
@@ -55,31 +53,19 @@ def add_row(div):
 
     # ボタンが押されていない場合は終了
     if not div.button("Add Row"):
+        # エラーメッセージを出す
         return None
 
     # 以下はボタンが押された場合は以下を実行
-    response = requests.post(
-        "http://localhost:8000/add_row",
-        json={
-            "id_by_user": id_,
-            "name": name,
-            "type": type_,
-            "size_x": size_x,
-            "size_y": size_y,
-            "size_z": size_z,
-            "remarks": remarks,
-        },
-    )
-    # div.write(response.json())  # デバッグ用
+    is_success = add_row_api(id_, name, type_, size_x, size_y, size_z, remarks)
     # print(response.json())  # デバッグ用
-    if response.json()["msg"] != "Row added":
+    if is_success:
         div.error("failed to add this record.")
-
-    div.success(f"{name} is added.")
+    else:
+        div.success(f"{name} is added.")
 
     count_row += 1
     count_row %= 10000  # 数字がでかくなりすぎないように10000の剰余にしている
-    time.sleep(3)
     st.session_state["last_modified_time"] = datetime.now().isoformat()
     st.rerun()
 
@@ -98,8 +84,6 @@ def add_files(div):
         "Files", accept_multiple_files=True, key=f"add_files_uploader{count_file}"
     )
 
-    upload_log = []
-
     # アップロードファイルが未選択の場合ははじく
     if not uploaded_files:
         return None
@@ -108,15 +92,14 @@ def add_files(div):
     if not button_container.button("Upload Files"):
         return None
 
+    upload_log = []
     error_files = []
     for file in uploaded_files:
-        response = requests.post(
-            "http://localhost:8000/upload_files", files={"file": file}
-        )
+        is_success = upload_file_api(file)
+
         # アップロード結果を表示
-        if response.status_code == 200:
-            filename = response.json()["filename"]
-            upload_log += [[div.success(f"{filename} uploaded successfully!"), 1]]
+        if is_success:
+            upload_log += [[div.success(f"{file.name} uploaded successfully!"), 1]]
         else:
             upload_log += [[div.error(f"Error uploading {file.name}"), 0]]
             error_files += [file.name]
@@ -162,7 +145,7 @@ def add_csv(div):
     upload_log_container = div.empty()
 
     # 処理
-    uploaded_file = uploader_container.file_uploader(
+    csv_ = uploader_container.file_uploader(
         "CSV",
         accept_multiple_files=False,
         key=f"add_csv_uploader{count_csv}",
@@ -170,55 +153,19 @@ def add_csv(div):
     )
 
     # アップロードファイルが未選択の場合ははじく
-    if not uploaded_file:
+    if not csv_:
         return None
 
     # ボタンが押されていない場合ははじく
     if not button_container.button("Upload CSV"):
         return None
 
-    # CSVを読み込む(バリデーションのため)
-    try:
-        df = pd.read_csv(uploaded_file)
-        df = df.rename(
-            columns={
-                "id": "id_by_user",
-                "size x": "size_x",
-                "size y": "size_y",
-                "size z": "size_z",
-            }
-        )
-        for col, type_str in DF_CONFIG.COLUMN_TYPE.items():
-            if col in list(df.columns):
-                df[col] = str2each_type(df[col], type_str)
-        print(DF_CONFIG.COLUMN_TYPE)
-        print(df)
-    except Exception as e:
-        div.error(f"Error reading CSV: {e}")
-        return None
-
-    # データのバリデーション
-    try:
-        data_list = df.to_dict(orient="records")
-        validated_data = CsvTableData(
-            data=[CsvRowData(**item) for item in data_list], message=uploaded_file.name
-        )
-    except ValidationError as e:
-        div.error(f"Data validation error: {e}")
-        return None
-
-    response = requests.post(
-        "http://localhost:8000/upload_csv", json=validated_data.model_dump()
-    )
+    is_success = upload_csv_api(csv_)
 
     # アップロード結果を表示
-
-    if response.status_code == 200:
-        filename = response.json()["filename"]
-        div.success(f"{filename} uploaded successfully!")
-        print(response.json()["msg"])
+    if is_success:
+        div.success("csv file uploaded succesfully!")
     else:
-        print(response.json())
         div.error("Error uploading csv")
 
     # 一連の処理が終わったらアップローダの中身やボタンを掃除する
@@ -226,7 +173,7 @@ def add_csv(div):
     count_csv %= 10000  # でかくなりすぎないように10000の剰余にする
     uploader_container.empty()
     button_container.empty()
-    uploaded_file = uploader_container.file_uploader(
+    csv_ = uploader_container.file_uploader(
         "Upload files", accept_multiple_files=True, key=f"add_csv_uploader{count_csv}"
     )
     time.sleep(3)

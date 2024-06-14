@@ -1,17 +1,11 @@
-# https://docs.streamlit.io/develop/api-reference/execution-flow/st.dialog
-# https://qiita.com/KanNishida/items/f540a02e7ff561ecf915
-# https://zenn.dev/levtech/articles/aee2cf0845cad9
-import json
-import time
 from datetime import datetime
 
-import requests
 import streamlit as st
+from api.api import calc_api, modify_data_api
 from modules.constants import DF_CONFIG
-from modules.utils import diff_rows
 
 
-def modify_data(df):
+def modify_and_calc(df):
     df_container = st.empty()
     col_l, col_r = st.columns(8)[:2]
     checkbox_container = col_l.empty()
@@ -24,11 +18,12 @@ def modify_data(df):
             width=DF_CONFIG.DF_WIDTH,
             height=DF_CONFIG.DF_HEIGHT[1],
             hide_index=True,
+            column_config=DF_CONFIG.COLUMN_CONFIG,
             column_order=DF_CONFIG.COLUMN_ORDER,
         )
 
         if button_container.button("Request Calculation"):
-            calc(df[df["status"] == "just_uploaded"])
+            calc()
 
         # st.write(response.json()) # デバッグ用
         return None
@@ -38,10 +33,10 @@ def modify_data(df):
         df,
         width=DF_CONFIG.DF_WIDTH,
         height=DF_CONFIG.DF_HEIGHT[1],
-        column_config=DF_CONFIG.COLUMN_CONFIG,
-        disabled=DF_CONFIG.DISABLED_COLUMNS,
         hide_index=True,
+        column_config=DF_CONFIG.COLUMN_CONFIG,
         column_order=DF_CONFIG.COLUMN_ORDER,
+        disabled=DF_CONFIG.DISABLED_COLUMNS,
     )
 
     # 変更反映ボタンを押さなければ何もしない
@@ -49,38 +44,28 @@ def modify_data(df):
         return None
 
     # 以下は変更反映ボタンが押された場合
-    # # orient='records': レコードごとにjson形式にする
-    df_diff = diff_rows(df, df_modified)
-    print(df_diff)
-
-    response = requests.put(
-        "http://localhost:8000/update_data",
-        json={"data": json.loads(df_diff.to_json(orient="records"))},
-    )
-    inform_modified()
-    # st.success("反映変更した")  # todo エラーハンドリング
-    # st.write(response.json())  # デバッグ用
-    print(response.json())
-    time.sleep(3)
+    is_success = modify_data_api(df, df_modified)
+    inform_modified(is_success)
     st.session_state["last_modified_time"] = datetime.now().isoformat()
     st.rerun()
 
 
 @st.experimental_dialog("Saved")
-def inform_modified():
-    st.write("Modification saved")
+def inform_modified(is_success):
+    print(is_success)
+    if is_success:
+        st.success("Modification saved")
+    else:
+        st.error("Modification failed")
 
 
 @st.experimental_dialog("Calculate")
-def calc(df):
+def calc():
     st.write("Are you sure you want to request calculation?")
     message = st.text_input("Any Comments:")
+    is_success = False
     if st.button("Request"):
-        calc_data = json.loads(df.to_json(orient="records"))
-        response = requests.post(
-            "http://localhost:8000/calc",
-            json={"data": calc_data, "message": message},
-        )
-        print(response)
+        is_success = calc_api(message)
+    if is_success:
         st.session_state["last_modified_time"] = datetime.now().isoformat()
         st.rerun()

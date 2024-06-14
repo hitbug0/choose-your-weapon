@@ -23,7 +23,7 @@ from .utils import combine_without_duplication, get_db, init_db  # type: ignore
 async def lifespan(app: FastAPI):
     print("startup event")
     init_db()
-    # todo 計算中にサーバが落ちてcalculatingになったままのレコードに対して計算を実行する
+    # todo 計算中にサーバが落ちてcalculatingになったままのレコードに対して計算を実行する機能を追加する
     yield
     print("shutdown event")
 
@@ -47,12 +47,18 @@ async def fetch_data_and_last_update():
 
     conn.close()
 
-    return {"data": all_data, "last_update": last_update}
+    return JSONResponse(
+        content={
+            "data": all_data,
+            "last_update": last_update,
+            "msg": "all data is here",
+        }
+    )
 
 
 # ファイルアップロード処理
-@app.post("/upload_files")
-async def upload_files(file: UploadFile = File(...)):
+@app.post("/upload_file")
+async def upload_file(file: UploadFile = File(...)):
     # file.filenameの型検証 (os.path.join のため)
     if type(file.filename) is not str:
         return JSONResponse(
@@ -68,7 +74,6 @@ async def upload_files(file: UploadFile = File(...)):
 
 
 # csvアップロード処理
-# todo データモデルでバリデーションできるようにする
 @app.post("/upload_csv")
 async def upload_csv(uploaded_data: TableData):
     conn = get_db()
@@ -131,7 +136,7 @@ async def add_row(data: RowData):
     )
     conn.commit()
     conn.close()
-    return {"msg": "Row added"}
+    return JSONResponse(content={"msg": "Row added"})
 
 
 # データ更新処理
@@ -164,7 +169,7 @@ async def update_data(update_data: TableData):
         )
     conn.commit()
     conn.close()
-    return {"msg": "Data updated"}
+    return JSONResponse(content={"msg": "Data updated"})
 
 
 # グローバル変数として計算タスク状態を保持
@@ -176,25 +181,13 @@ register_lock = asyncio.Lock()
 
 
 # 計算依頼処理
-@app.post("/calc")
-async def calc_data(calc_data: TableData, background_tasks: BackgroundTasks):
+# todo 動くようにする
+@app.put("/calc")
+async def calc_data(background_tasks: BackgroundTasks):
     global calculation_in_progress
 
-    # 計算のバックグラウンド実行
-    now = datetime.now().isoformat()
-    calc_uuid_list = [row.uuid for row in calc_data.data]
-    print(calc_data.message)
-    async with calculation_lock:
-        calculation_in_progress = combine_without_duplication(
-            calculation_in_progress, calc_uuid_list
-        )
-
-    print(calculation_in_progress)
-    for uuid in calc_uuid_list:
-        # 同期関数を使って非同期タスクを実行する
-        background_tasks.add_task(run_calculation_sync, uuid)
-
     # ステータスの更新
+    # 更新した直後に異常終了して計算が実行されなかったケースを考える
     conn = get_db()
     cursor = conn.cursor()
     for row in calc_data.data:
@@ -205,7 +198,24 @@ async def calc_data(calc_data: TableData, background_tasks: BackgroundTasks):
         )
     conn.commit()
     conn.close()
-    return {"msg": "Calculation started"}
+
+    # 計算のバックグラウンド実行
+    # DBにおいてjust_uploadedのものをcalculatingに一気に変える処理を書く。
+    # その後が肝？　DBの扱いをどうするか（viewみたいなものを用意するか）
+    now = datetime.now().isoformat()
+    calc_uuid_list = [row.uuid for row in aaa]  # todo 考える
+    print(aaa)
+    async with calculation_lock:
+        calculation_in_progress = combine_without_duplication(
+            calculation_in_progress, calc_uuid_list
+        )
+
+    print(calculation_in_progress)
+    for uuid in calc_uuid_list:
+        # 同期関数を使って非同期タスクを実行する
+        background_tasks.add_task(run_calculation_sync, uuid)
+
+    return JSONResponse(content={"msg": "Calculation started"})
 
 
 # 非同期関数を同期関数でラップする
@@ -250,7 +260,7 @@ async def register_data(register_data: TableData):
         )
     conn.commit()
     conn.close()
-    return {"msg": "Register requested"}
+    return JSONResponse(content={"msg": "Register requested"})
 
 
 # データ検索処理

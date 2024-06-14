@@ -9,11 +9,12 @@ from modules.utils import count_status  # type: ignore
 def check_status(df, filtered_df):
     # todo 登録や計算の進捗を数値及びグラフで確認できる
     # todo グラフをそれっぽいものに変える
-    df_container = st.dataframe(
+    st.dataframe(
         filtered_df,
         width=DF_CONFIG.DF_WIDTH,
         height=DF_CONFIG.DF_HEIGHT[0],
         hide_index=True,
+        column_config=DF_CONFIG.COLUMN_CONFIG,
         column_order=DF_CONFIG.COLUMN_ORDER,
     )
     cols = st.columns(3)
