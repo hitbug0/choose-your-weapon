@@ -1,5 +1,4 @@
 import asyncio
-import io
 import os
 import random
 from contextlib import asynccontextmanager
@@ -9,7 +8,6 @@ from uuid import uuid4
 
 # 以下のimportにおける type: ignore は、誤判定を消すために記した
 import aiofiles  # type: ignore
-import pandas as pd  # type: ignore
 from fastapi import BackgroundTasks, FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
 
@@ -72,30 +70,25 @@ async def upload_files(file: UploadFile = File(...)):
 # csvアップロード処理
 # todo データモデルでバリデーションできるようにする
 @app.post("/upload_csv")
-async def upload_csv(file: UploadFile = File(...)):
-    contents = await file.read()
-    df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
-    print("received an uploaded csv file as df")
-
-    # 初期値の設定
+async def upload_csv(uploaded_data: TableData):
     conn = get_db()
     cursor = conn.cursor()
-    uuid0 = str(uuid4())
     now = datetime.now().isoformat()
+    uuid0 = str(uuid4())
 
     # CSVの内容をDBに挿入
-    for index, row in df.iterrows():
+    for index, row in enumerate(uploaded_data.data):
         cursor.execute(
             INSERT_SQL_COMMAND,
             (
-                uuid0 + str(index + 1).zfill(3),
-                row["id"],
-                row["name"],
-                row["type"],
-                row["size x"],  # sizeが数値になっているかバリデーションを入れる
-                row["size y"],
-                row["size z"],
-                row["remarks"],
+                uuid0 + f"_{str(index + 1).zfill(3)}",
+                row.id_by_user,
+                row.name,
+                row.type,
+                row.size_x,  # sizeが数値になっているかバリデーションを入れる
+                row.size_y,
+                row.size_z,
+                row.remarks,
                 now,
                 now,
                 "",
@@ -106,7 +99,10 @@ async def upload_csv(file: UploadFile = File(...)):
     conn.commit()
     conn.close()
 
-    return JSONResponse(content={"filename": file.filename, "msg": "CSV uploaded"})
+    return JSONResponse(
+        # content={"filename": uploaded_data.message, "msg": "CSV uploaded"}
+        content={"filename": "uploaded_data.message", "msg": "CSV uploaded"}
+    )
 
 
 # 行追加処理

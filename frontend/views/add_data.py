@@ -1,16 +1,34 @@
 import time
 from datetime import datetime
 
+import pandas as pd
 import requests
 import streamlit as st
-from get_data import check_size_type  # type: ignore
+from modules.constants import DF_CONFIG, CsvRowData, CsvTableData
+from modules.utils import str2each_type
+from pydantic import ValidationError
 
 count_row = 0  # アップロードの回ごとに更新される値
 count_csv = 0  # アップロードの回ごとに更新される値
 count_file = 0  # アップロードの回ごとに更新される値
 
 
-def add_single_row(div):
+def add_data(df):
+    st.dataframe(
+        df,
+        width=DF_CONFIG.DF_WIDTH,
+        height=DF_CONFIG.DF_HEIGHT[0],
+        hide_index=True,
+        column_order=DF_CONFIG.COLUMN_ORDER,
+    )
+    columns_ = st.columns([2, 3])
+    columns_[0].subheader("Upload")
+    add_files(columns_[0])
+    add_csv(columns_[0])
+    add_row(columns_[1])
+
+
+def add_row(div):
     global count_row
     # DBへの行の追加
     div.subheader("Add Data")
@@ -18,23 +36,21 @@ def add_single_row(div):
     # テキストボックスの配置
     # keyを更新することで追加処理後に入力欄を空にできる
     cols_size = div.columns(3)
-    id_ = cols_size[0].text_input(
-        "ID (optional)", "", key=f"add_single_row_id_{count_row}"
-    )
-    name = cols_size[1].text_input("Name", "", key=f"add_single_row_name_{count_row}")
-    type_ = cols_size[2].text_input("Type", "", key=f"add_single_row_type_{count_row}")
+    id_ = cols_size[0].text_input("ID (optional)", "", key=f"add_row_id_{count_row}")
+    name = cols_size[1].text_input("Name", "", key=f"add_row_name_{count_row}")
+    type_ = cols_size[2].text_input("Type", "", key=f"add_row_type_{count_row}")
     cols_size = div.columns(3)
-    size_x = cols_size[0].text_input(
-        "Size 1", "", key=f"add_single_row_size_x_{count_row}"
+    size_x = cols_size[0].number_input(
+        "Size 1", value=None, key=f"add_row_size_x_{count_row}"
     )
-    size_y = cols_size[1].text_input(
-        "Size 2", "", key=f"add_single_row_size_y_{count_row}"
+    size_y = cols_size[1].number_input(
+        "Size 2", value=None, key=f"add_row_size_y_{count_row}"
     )
-    size_z = cols_size[2].text_input(
-        "Size 3", "", key=f"add_single_row_size_z_{count_row}"
+    size_z = cols_size[2].number_input(
+        "Size 3", value=None, key=f"add_row_size_z_{count_row}"
     )
     remarks = div.text_input(
-        "Remarks (optional)", "", key=f"add_single_row_remarks_{count_row}"
+        "Remarks (optional)", "", key=f"add_row_remarks_{count_row}"
     )
 
     # ボタンが押されていない場合は終了
@@ -48,16 +64,16 @@ def add_single_row(div):
             "id_by_user": id_,
             "name": name,
             "type": type_,
-            "size_x": check_size_type(size_x),
-            "size_y": check_size_type(size_y),
-            "size_z": check_size_type(size_z),
+            "size_x": size_x,
+            "size_y": size_y,
+            "size_z": size_z,
             "remarks": remarks,
         },
     )
     # div.write(response.json())  # デバッグ用
     # print(response.json())  # デバッグ用
     if response.json()["msg"] != "Row added":
-        div.error(f"failed to add this record.")
+        div.error("failed to add this record.")
 
     div.success(f"{name} is added.")
 
@@ -161,8 +177,38 @@ def add_csv(div):
     if not button_container.button("Upload CSV"):
         return None
 
+    # CSVを読み込む(バリデーションのため)
+    try:
+        df = pd.read_csv(uploaded_file)
+        df = df.rename(
+            columns={
+                "id": "id_by_user",
+                "size x": "size_x",
+                "size y": "size_y",
+                "size z": "size_z",
+            }
+        )
+        for col, type_str in DF_CONFIG.COLUMN_TYPE.items():
+            if col in list(df.columns):
+                df[col] = str2each_type(df[col], type_str)
+        print(DF_CONFIG.COLUMN_TYPE)
+        print(df)
+    except Exception as e:
+        div.error(f"Error reading CSV: {e}")
+        return None
+
+    # データのバリデーション
+    try:
+        data_list = df.to_dict(orient="records")
+        validated_data = CsvTableData(
+            data=[CsvRowData(**item) for item in data_list], message=uploaded_file.name
+        )
+    except ValidationError as e:
+        div.error(f"Data validation error: {e}")
+        return None
+
     response = requests.post(
-        "http://localhost:8000/upload_csv", files={"file": uploaded_file}
+        "http://localhost:8000/upload_csv", json=validated_data.model_dump()
     )
 
     # アップロード結果を表示
@@ -172,6 +218,7 @@ def add_csv(div):
         div.success(f"{filename} uploaded successfully!")
         print(response.json()["msg"])
     else:
+        print(response.json())
         div.error("Error uploading csv")
 
     # 一連の処理が終わったらアップローダの中身やボタンを掃除する

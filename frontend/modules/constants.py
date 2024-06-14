@@ -1,7 +1,7 @@
-from typing import List
+from typing import List, Optional
 
 import streamlit as st
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # dataframeの表示に関する設定
@@ -87,3 +87,18 @@ CONTENTS_CONFIG = ContentsConfig(
 "Check Status:            [閲覧] 計算依頼/登録依頼をしたデータの内容確認/ステータス確認
 "Check Files:             [追加/閲覧/削除] 過去にアップロードしたファイルに関するデータ確認/アップロード/ダウンロード/削除
 """
+
+
+class CsvRowData(BaseModel):
+    id_by_user: str
+    name: str
+    type: str
+    size_x: float = Field(gt=0)
+    size_y: float = Field(gt=0)
+    size_z: float = Field(gt=0)
+    remarks: str
+
+
+class CsvTableData(BaseModel):
+    data: List[CsvRowData]
+    message: Optional[str] = ""

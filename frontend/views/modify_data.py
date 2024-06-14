@@ -1,36 +1,36 @@
 # https://docs.streamlit.io/develop/api-reference/execution-flow/st.dialog
 # https://qiita.com/KanNishida/items/f540a02e7ff561ecf915
+# https://zenn.dev/levtech/articles/aee2cf0845cad9
 import json
 import time
 from datetime import datetime
 
 import requests
 import streamlit as st
-from constants import DF_CONFIG
+from modules.constants import DF_CONFIG
+from modules.utils import diff_rows
 
 
-def diff_rows(df1, df2):
-    # 2つのデータフレームが値のみが異なる行をdf2から抽出する
-    # df1とdf2を比較し、異なる場所をTrue、同じ場所をFalseとするマスクを作成する
-    mask = df1.ne(df2)
-
-    # df2からマスクがTrueの行を抽出する
-    diff_rows = df2[mask.any(axis=1)]
-    return diff_rows
-
-
-def modify_data(div, df_container, df):
-
-    col_l, col_r = div.columns(8)[:2]
+def modify_data(df):
+    df_container = st.empty()
+    col_l, col_r = st.columns(8)[:2]
     checkbox_container = col_l.empty()
     button_container = col_r.empty()
 
-    # 編集モードでなければ計算依頼のみ
+    # 編集モードでなければデータ表示と計算依頼のみ
     if not checkbox_container.checkbox("Modify Mode"):
+        df_container.dataframe(
+            df,
+            width=DF_CONFIG.DF_WIDTH,
+            height=DF_CONFIG.DF_HEIGHT[1],
+            hide_index=True,
+            column_order=DF_CONFIG.COLUMN_ORDER,
+        )
+
         if button_container.button("Request Calculation"):
             calc(df[df["status"] == "just_uploaded"])
 
-        # div.write(response.json()) # デバッグ用
+        # st.write(response.json()) # デバッグ用
         return None
 
     # 以下は編集モードの場合
@@ -57,12 +57,18 @@ def modify_data(div, df_container, df):
         "http://localhost:8000/update_data",
         json={"data": json.loads(df_diff.to_json(orient="records"))},
     )
-    st.success("反映変更した")  # todo エラーハンドリング
-    # div.write(response.json())  # デバッグ用
+    inform_modified()
+    # st.success("反映変更した")  # todo エラーハンドリング
+    # st.write(response.json())  # デバッグ用
     print(response.json())
     time.sleep(3)
     st.session_state["last_modified_time"] = datetime.now().isoformat()
     st.rerun()
+
+
+@st.experimental_dialog("Saved")
+def inform_modified():
+    st.write("Modification saved")
 
 
 @st.experimental_dialog("Calculate")
@@ -74,21 +80,6 @@ def calc(df):
         response = requests.post(
             "http://localhost:8000/calc",
             json={"data": calc_data, "message": message},
-        )
-        print(response)
-        st.session_state["last_modified_time"] = datetime.now().isoformat()
-        st.rerun()
-
-
-@st.experimental_dialog("Request Register")
-def register(df):
-    st.write("Are you sure you want to request register?")
-    message = st.text_input("Any Comments:")
-    if st.button("Request"):
-        registered_data = json.loads(df.to_json(orient="records"))
-        response = requests.post(
-            "http://localhost:8000/register",
-            json={"data": registered_data, "message": message},
         )
         print(response)
         st.session_state["last_modified_time"] = datetime.now().isoformat()

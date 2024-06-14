@@ -1,9 +1,64 @@
+import functools
+
 import pandas as pd
 
+__LENGTH_LOG = 50
 
-def filter_dataframe(
-    df0, name=None, size_min=None, size_max=None, type_=None, status=None
-):
+
+# ロギング用のデコレータ関数
+def logging_decorator(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        n = (__LENGTH_LOG - len(f" start {func.__name__} ")) // 2
+        print("=" * n + f" start {func.__name__} " + "=" * n)
+        result = func(*args, **kwargs)
+        print("=" * (n + 1) + f" end {func.__name__} " + "=" * (n + 1))
+        return result
+
+    return wrapper
+
+
+def str2float(num_str: str) -> float | None:
+    try:
+        num = float(num_str)
+    except ValueError:
+        # print(e)
+        num = None
+    return num
+
+
+def diff_rows(df1, df2):
+    # 2つのデータフレームが値のみが異なる行をdf2から抽出する
+    # df1とdf2を比較し、異なる場所をTrue、同じ場所をFalseとするマスクを作成する
+    mask = df1.ne(df2)
+
+    # df2からマスクがTrueの行を抽出する
+    diff_rows = df2[mask.any(axis=1)]
+    return diff_rows
+
+
+def str2each_type(df, type_str):
+    if type_str == "str":
+        return df.astype(str)
+    elif type_str == "int":
+        return df.astype(int)
+    elif type_str == "float":
+        return df.astype(float)
+    elif type_str == "datetime":
+        return pd.to_datetime(df)
+    else:
+        print("unknown type")
+        return False
+
+
+def count_status(df, column_name):
+    if column_name not in df.columns:
+        raise ValueError(f"Column {column_name} does not exist in the DataFrame")
+
+    return df[column_name].value_counts()
+
+
+def filter_data(df0, name=None, size_min=None, size_max=None, type_=None, status=None):
     """
     条件に基づいてDataFrameを検索します。
 
@@ -21,9 +76,9 @@ def filter_dataframe(
     # DataFrameをコピー
     df1 = df0.copy()
 
-    print(status)
-    print(size_min)
-    print(size_max)
+    # print(status)
+    # print(size_min)
+    # print(size_max)
 
     # 'name'カラムに対する部分一致検索
     if name:
