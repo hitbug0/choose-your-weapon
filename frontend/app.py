@@ -9,7 +9,7 @@ from datetime import datetime
 import streamlit as st
 
 # 以下のimportにおける type: ignore は、誤判定を消すために記した
-from api.api import get_data  # type: ignore
+from api.api import get_data_api  # type: ignore
 from modules.constants import CONTENTS_CONFIG  # type: ignore
 from streamlit import session_state as stss
 from views.add_data import add_data  # type: ignore
@@ -48,7 +48,7 @@ def main():
     initialize_static_contents()
 
     # データの取得
-    df, stss["last_modified_time"], is_sccess = get_data(stss["last_modified_time"])
+    df, stss["last_modified_time"], is_sccess = get_data_api(stss["last_modified_time"])
     if not is_sccess:
         st.write("Failed to get data.")
         return False

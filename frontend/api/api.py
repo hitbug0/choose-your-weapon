@@ -17,7 +17,7 @@ SERVER_URL = "http://localhost:8000"
 # データベースからデータと最終更新時刻を取得
 @st.cache_data(ttl=300)
 @logging_decorator
-def get_data(last_modified_time):
+def get_data_api(last_modified_time):
     response = requests.get(f"{SERVER_URL}/fetch")
     status_code = response.status_code
     if status_code != 200:
