@@ -7,6 +7,7 @@ import streamlit as st
 from api.api import register_api  # type: ignore
 from modules.constants import DF_CONFIG  # type: ignore
 from modules.utils import count_status  # type: ignore
+from streamlit import session_state as stss
 
 
 def metrics_and_register(df, filtered_df):
@@ -40,5 +41,5 @@ def register():
     if st.button("Request"):
         is_success = register_api(message)
     if is_success:
-        st.session_state["last_modified_time"] = datetime.now().isoformat()
+        stss["last_modified_time"] = datetime.now().isoformat()
         st.rerun()

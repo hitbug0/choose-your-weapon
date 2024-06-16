@@ -7,39 +7,52 @@
 from datetime import datetime
 
 import streamlit as st
-from api.api import get_data  # type: ignore
 
 # 以下のimportにおける type: ignore は、誤判定を消すために記した
+from api.api import get_data  # type: ignore
 from modules.constants import CONTENTS_CONFIG  # type: ignore
+from streamlit import session_state as stss
 from views.add_data import add_data  # type: ignore
 from views.check_status import check_status  # type: ignore
 from views.metrics_and_register import metrics_and_register  # type: ignore
 from views.modify_and_calc import modify_and_calc  # type: ignore
 from views.search import search  # type: ignore
 
-# 開始ログ
-n = 20
-print("\n\n\n\n" + "=" * n + " start app " + "=" * n + "\n")
 
-
-def main():
-    # セッション状態の初期化
-    if "last_modified_time" not in st.session_state:
-        st.session_state["last_modified_time"] = datetime.now().isoformat()
+# セッション状態の初期化関数
+# キャッシュは持たない。
+# 時間がかかる処理ではないし、たまにキャッシュがあるのにセッション状態がないケースが起こり、バグにつながるため
+def initialize_config_and_session_state():
+    print("initialize_session_state")
 
     # ページ全般の設定
     st.set_page_config(layout="wide")
 
+    # セッション状態の初期化
+    if "last_modified_time" not in stss:
+        stss.last_modified_time = datetime.now().isoformat()
+
+
+# 初期ロード時のみ走る関数
+# いかなる状況でも内容が変わらないコンテンツはここで定義しておく
+@st.cache_data(ttl=60)
+def initialize_static_contents():
+    print("=============== initialize static contents ===============")
+
+    # メインエリア
+    st.header("Choose your weapons", divider="gray")
+
+
+def main():
+    initialize_config_and_session_state()
+    initialize_static_contents()
+
     # データの取得
-    df, st.session_state["last_modified_time"], is_sccess = get_data(
-        st.session_state["last_modified_time"]
-    )
+    df, stss["last_modified_time"], is_sccess = get_data(stss["last_modified_time"])
     if not is_sccess:
         st.write("Failed to get data.")
         return False
 
-    # メインエリア
-    st.header("Choose your weapons", divider="gray")
     tab_container = st.empty()
 
     # サイドバー
@@ -66,4 +79,5 @@ def main():
         check_status(df, filtered_df)
 
 
-main()
+if __name__ == "__main__":
+    main()

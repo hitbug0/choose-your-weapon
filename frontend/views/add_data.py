@@ -4,6 +4,7 @@ from datetime import datetime
 import streamlit as st
 from api.api import add_row_api, upload_csv_api, upload_file_api  # type: ignore
 from modules.constants import DF_CONFIG  # type: ignore
+from streamlit import session_state as stss
 
 count_row = 0  # アップロードの回ごとに更新される値
 count_csv = 0  # アップロードの回ごとに更新される値
@@ -66,7 +67,7 @@ def add_row(div):
 
     count_row += 1
     count_row %= 10000  # 数字がでかくなりすぎないように10000の剰余にしている
-    st.session_state["last_modified_time"] = datetime.now().isoformat()
+    stss["last_modified_time"] = datetime.now().isoformat()
     st.rerun()
 
 
@@ -131,7 +132,7 @@ def add_files(div):
     )
     time.sleep(3)
     upload_log_container.empty()
-    st.session_state["last_modified_time"] = datetime.now().isoformat()
+    stss["last_modified_time"] = datetime.now().isoformat()
     st.rerun()
 
 
@@ -178,5 +179,5 @@ def add_csv(div):
     )
     time.sleep(3)
     upload_log_container.empty()
-    st.session_state["last_modified_time"] = datetime.now().isoformat()
+    stss["last_modified_time"] = datetime.now().isoformat()
     st.rerun()

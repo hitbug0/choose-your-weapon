@@ -3,6 +3,7 @@ from datetime import datetime
 import streamlit as st
 from api.api import calc_api, modify_data_api
 from modules.constants import DF_CONFIG
+from streamlit import session_state as stss
 
 
 def modify_and_calc(df):
@@ -46,7 +47,7 @@ def modify_and_calc(df):
     # 以下は変更反映ボタンが押された場合
     is_success = modify_data_api(df, df_modified)
     inform_modified(is_success)
-    st.session_state["last_modified_time"] = datetime.now().isoformat()
+    stss["last_modified_time"] = datetime.now().isoformat()
     st.rerun()
 
 
@@ -67,5 +68,5 @@ def calc():
     if st.button("Request"):
         is_success = calc_api(message)
     if is_success:
-        st.session_state["last_modified_time"] = datetime.now().isoformat()
+        stss["last_modified_time"] = datetime.now().isoformat()
         st.rerun()
